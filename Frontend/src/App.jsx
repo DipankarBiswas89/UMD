@@ -1,12 +1,8 @@
-<<<<<<< HEAD
 import React, {useState} from 'react';
 import './App.css';  // Import your CSS file to style the app
 import Spline from '@splinetool/react-spline'; // Import Spline for 3D animation
 import Chatbot from './chatbot';  // Import the Chatbot component
-=======
-import { useState } from 'react'
 
->>>>>>> a429895fa7070ee5304d2db04477722843a09f1b
 
 const App = () => {
   // Function to handle button click
@@ -18,7 +14,7 @@ const App = () => {
   };
 
   return (
-<<<<<<< HEAD
+
     <div className="app-container">
       {/* Spline 3D scene */}
       <div className="spline-container">
@@ -32,13 +28,5 @@ const App = () => {
     </div>
   );
 };
-=======
-    <>
-      <h1>Hello </h1>
-      
-    </>
-  )
-}
->>>>>>> a429895fa7070ee5304d2db04477722843a09f1b
 
 export default App;
