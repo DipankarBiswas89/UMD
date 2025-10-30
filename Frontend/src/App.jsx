@@ -22,33 +22,34 @@ export default function App() {
   };
 
   // 💬 Send message
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage = { text: input, sender: "user" };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Fake bot response (you can connect to backend later)
-    setTimeout(() => {
-      const botText = generateBotReply(input);
+    // Call backend API
+    try {
+      const params = new URLSearchParams({ question: input });
+      const res = await fetch(`/api/ask-and-speak?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(`Server responded ${res.status}`);
+      }
+      const data = await res.json();
+      const botText = data?.answer || "Sorry, I couldn't get a response.";
       const botMessage = { text: botText, sender: "bot" };
       setMessages((prev) => [...prev, botMessage]);
-      speak(botText); // 🗣️ Speak bot reply aloud
-    }, 1000);
+      speak(botText);
+    } catch (err) {
+      const errorText = "There was an error contacting the server.";
+      const botMessage = { text: errorText, sender: "bot" };
+      setMessages((prev) => [...prev, botMessage]);
+    }
 
     setInput("");
   };
 
-  // 🧠 Simple bot logic (can be replaced by AI API)
-  const generateBotReply = (text) => {
-    const lower = text.toLowerCase();
-    if (lower.includes("hello")) return "Hello there! How are you today?";
-    if (lower.includes("time"))
-      return `It's ${new Date().toLocaleTimeString()}`;
-    if (lower.includes("your name")) return "I'm UMD, your voice assistant!";
-    if (lower.includes("bye")) return "Goodbye! Have a great day!";
-    return "I'm still learning to understand that. Try saying hello!";
-  };
+  // Bot reply generation removed (now using backend)
 
   // 🗣️ Convert text to speech
   const speak = (text) => {
