@@ -150,12 +150,12 @@ export default function VoiceAssistant() {
         {!voiceStatus?.voice_sample && (
           <span className="voice-chip warn">No speaker WAV — upload yours</span>
         )}
-        {voiceStatus?.voice_sample && voiceStatus?.tts_microservice_healthy === false && (
+        {voiceStatus?.voice_sample && !voiceStatus?.voice_cloning_ready && (
           <span className="voice-chip warn">
-            Cloning offline — start TTS service (:8001) or you get generic AI voice
+            Cloning offline — generic AI voice until XTTS is ready
           </span>
         )}
-        {voiceStatus?.tts_microservice_healthy === true && (
+        {voiceStatus?.voice_cloning_ready && (
           <span className="voice-chip ok">Cloned voice active</span>
         )}
       </section>

@@ -18,7 +18,13 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def _normalize_database_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    return url.strip().strip("'\"")
+
+
+DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL"))
 
 if not DATABASE_URL:
     raise ValueError(

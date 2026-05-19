@@ -1,13 +1,32 @@
-BACKEND/project_311/
+# Python
 __pycache__/
-.env
 *.pyc
+.venv/
+BACKEND/.venv/
+BACKEND/project_311/
+tts-service-python311/.venv/
+
+# Secrets
+.env
+**/.env
+!**/.env.example
+
+# Runtime data (do not commit)
 BACKEND/uploads/
 BACKEND/generated_audio/
 BACKEND/models/whisper/
+BACKEND/voices/output_*
+BACKEND/voices/test_*
+BACKEND/voices/*_xtts_ready.wav
 tts-service-python311/generated/
-tts-service-python311/.venv/
 tts-service-python311/models/
+
+# Node
 node_modules/
 dist/
-BACKEND/.venv/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

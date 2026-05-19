@@ -35,7 +35,9 @@ def _use_local_coqui() -> bool:
         from utils.coqui_local import is_coqui_installed
 
         return is_coqui_installed()
-    return TTS_BACKEND == "microservice" and os.getenv("TTS_FORCE_LOCAL", "").lower() in ("1", "true")
+    if TTS_BACKEND == "microservice":
+        return os.getenv("TTS_FORCE_LOCAL", "").lower() in ("1", "true", "yes")
+    return False
 
 
 class TTSService:

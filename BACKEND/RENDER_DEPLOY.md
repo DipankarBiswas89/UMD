@@ -54,8 +54,19 @@ Expected:
 }
 ```
 
+## Vercel (frontend)
+
+Set in Vercel → Environment Variables:
+
+```
+VITE_API_URL=https://your-api.onrender.com
+```
+
+Redeploy the frontend after adding this. See [../DEPLOY.md](../DEPLOY.md).
+
 ## Notes
 
 - First deploy may take 15+ minutes (torch + TTS download).
-- Free tier may OOM during XTTS load — use Starter plan or disable warmup (slower first request).
-- Do **not** run `setup_database.py` CREATE DATABASE on Render — database already exists.
+- Free tier may OOM during XTTS load — use Starter plan or set `SKIP_WHISPER_WARMUP=true` for faster cold start.
+- Do **not** run `CREATE DATABASE` on Render — the database already exists.
+- Do not commit `BACKEND/voices/output_*.wav` (generated cache).

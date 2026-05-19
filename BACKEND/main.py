@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db, init_db, Message, AsyncSessionLocal, check_db_connection
-import os
 from pathlib import Path
 import httpx
 import shutil
@@ -146,11 +145,12 @@ async def startup_event():
 	global groq_http_client
 	logger.info("Starting AI Voice Assistant API (Python %s)", sys.version.split()[0])
 
-	if await check_db_connection():
-		logger.info("Database connected successfully")
-	else:
-		logger.error("Database connection failed — check DATABASE_URL on Render")
+	if not await check_db_connection():
+		logger.error("Database connection failed — check DATABASE_URL")
+		if os.getenv("RENDER"):
+			raise RuntimeError("Database connection failed on startup")
 		return
+	logger.info("Database connected successfully")
 
 	try:
 		await init_db()
@@ -173,12 +173,15 @@ async def startup_event():
 	except Exception as e:
 		logger.error("TTS initialization warning: %s", e)
 
-	try:
-		whisper_start = time.perf_counter()
-		await warmup_whisper()
-		logger.info("Whisper warmup complete in %.1fs", time.perf_counter() - whisper_start)
-	except Exception as whisper_error:
-		logger.warning("Whisper warmup skipped: %s", whisper_error)
+	if os.getenv("SKIP_WHISPER_WARMUP", "").lower() not in ("1", "true", "yes"):
+		try:
+			whisper_start = time.perf_counter()
+			await warmup_whisper()
+			logger.info("Whisper warmup complete in %.1fs", time.perf_counter() - whisper_start)
+		except Exception as whisper_error:
+			logger.warning("Whisper warmup skipped: %s", whisper_error)
+	else:
+		logger.info("Whisper warmup skipped (SKIP_WHISPER_WARMUP)")
 
 	try:
 		groq_http_client = create_groq_http_client(timeout_seconds=15.0)
@@ -542,14 +545,19 @@ async def upload_voice(file: UploadFile = File(...)):
 async def get_voice_status():
 	"""Get the status of the current voice configuration"""
 	try:
+		from utils.coqui_local import is_coqui_installed
+
 		tts_service = get_tts_service()
-		tts_ok = await tts_service.check_tts_service()
+		micro_ok = await tts_service.check_tts_service()
+		cloning_ready = bool(tts_service._local_coqui_ready or micro_ok)
 		return JSONResponse(content={
 			"voice_model": str(tts_service.voice_model_path) if tts_service.voice_model_path else None,
 			"voice_sample": str(tts_service.voice_sample_path) if tts_service.voice_sample_path else None,
-			"tts_backend": os.getenv("TTS_BACKEND", "microservice"),
-			"tts_service_url": os.getenv("TTS_SERVICE_URL", "http://127.0.0.1:8001"),
-			"tts_microservice_healthy": tts_ok,
+			"tts_backend": os.getenv("TTS_BACKEND", "auto"),
+			"coqui_installed": is_coqui_installed(),
+			"xtts_ready": bool(tts_service._local_coqui_ready),
+			"tts_microservice_healthy": micro_ok,
+			"voice_cloning_ready": cloning_ready,
 			"voices_directory": str(VOICE_DIR),
 		})
 	except Exception as e:
