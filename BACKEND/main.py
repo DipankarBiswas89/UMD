@@ -163,12 +163,14 @@ async def startup_event():
 		warmup_start = time.perf_counter()
 		await tts_service.warmup_coqui()
 		if tts_service._local_coqui_ready:
-			logger.info("XTTS initialized successfully (in-process)")
+			logger.info("XTTS ready (local in-process — dev only)")
 		elif tts_service._tts_service_available:
 			await tts_service.sync_speaker_to_microservice()
-			logger.info("TTS microservice connected")
+			logger.info("TTS microservice connected (Railway / local :8001)")
 		else:
-			logger.warning("Voice cloning unavailable — Edge TTS fallback only")
+			logger.warning(
+				"Voice cloning unavailable — set TTS_SERVICE_URL to Railway; else Edge TTS fallback"
+			)
 		logger.info("TTS warmup finished in %.1fs", time.perf_counter() - warmup_start)
 	except Exception as e:
 		logger.error("TTS initialization warning: %s", e)
@@ -209,14 +211,16 @@ async def health():
 	from utils.coqui_local import is_coqui_installed
 
 	tts = get_tts_service()
+	micro_ok = await tts.check_tts_service()
 	return {
 		"ok": True,
 		"python": sys.version.split()[0],
 		"database": await check_db_connection(),
 		"coqui_installed": is_coqui_installed(),
-		"xtts_ready": tts._local_coqui_ready,
-		"tts_microservice": bool(tts._tts_service_available),
-		"tts_backend": os.getenv("TTS_BACKEND", "auto"),
+		"xtts_local": bool(tts._local_coqui_ready),
+		"tts_microservice_healthy": micro_ok,
+		"tts_service_url": os.getenv("TTS_SERVICE_URL", ""),
+		"tts_backend": os.getenv("TTS_BACKEND") or ("microservice" if os.getenv("RENDER") else "auto"),
 	}
 
 @app.get("/home")
@@ -553,10 +557,11 @@ async def get_voice_status():
 		return JSONResponse(content={
 			"voice_model": str(tts_service.voice_model_path) if tts_service.voice_model_path else None,
 			"voice_sample": str(tts_service.voice_sample_path) if tts_service.voice_sample_path else None,
-			"tts_backend": os.getenv("TTS_BACKEND", "auto"),
+			"tts_backend": os.getenv("TTS_BACKEND") or ("microservice" if os.getenv("RENDER") else "auto"),
 			"coqui_installed": is_coqui_installed(),
-			"xtts_ready": bool(tts_service._local_coqui_ready),
+			"xtts_local": bool(tts_service._local_coqui_ready),
 			"tts_microservice_healthy": micro_ok,
+			"tts_service_url": os.getenv("TTS_SERVICE_URL", ""),
 			"voice_cloning_ready": cloning_ready,
 			"voices_directory": str(VOICE_DIR),
 		})

@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+COPY requirements.txt build.sh ./
+RUN pip install --upgrade pip setuptools wheel && \
+    bash build.sh
 
 COPY . .
 
@@ -23,7 +23,9 @@ RUN mkdir -p speakers generated
 
 EXPOSE 8001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')" || exit 1
+ENV PORT=8001
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8001\")}/health')" || exit 1
+
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001}"]

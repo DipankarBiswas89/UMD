@@ -1,108 +1,82 @@
-# Deployment guide
+# Deployment guide (3 services)
 
-## Architecture
+| Service | Platform | Folder | Python | Coqui TTS |
+|---------|----------|--------|--------|-----------|
+| Frontend | Vercel | `Frontend` | — | — |
+| API backend | Render | `BACKEND` | 3.12+ (default) | **No** |
+| Voice cloning | Railway | `tts-service-python311` | **3.11** | **Yes** |
 
-| Part | Host | Notes |
-|------|------|--------|
-| Frontend | Vercel | React + Vite |
-| Backend | Render | Root dir: `BACKEND`, Python **3.11.9** (`runtime.txt`) |
-| Database | Render Postgres | `DATABASE_URL` only — no localhost |
-
-Voice cloning runs **in-process** on Render (Coqui XTTS v2). Local dev can use the optional `tts-service-python311` microservice on port 8001.
+```
+Browser (Vercel) → Render API → Railway TTS (XTTS v2)
+                      ↓
+                 Render Postgres
+```
 
 ---
 
-## 1. Render (backend)
+## 1. Railway — TTS microservice (deploy first)
 
-**Settings**
+See [tts-service-python311/RAILWAY_DEPLOY.md](tts-service-python311/RAILWAY_DEPLOY.md).
 
-- Root Directory: `BACKEND`
-- Build: `pip install -r requirements.txt`
-- Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+Copy the public URL, e.g. `https://your-tts.up.railway.app`.
 
-**Required env vars**
+Test: `GET https://your-tts.up.railway.app/health` → `"xtts_ready": true`
+
+---
+
+## 2. Render — API backend
+
+**Root:** `BACKEND`  
+**Build:** `pip install -r requirements.txt`  
+**Start:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 ```
 DATABASE_URL=<Render Postgres Internal URL>
-GROQ_API_KEY=<your key>
-TTS_BACKEND=coqui
+GROQ_API_KEY=<key>
+TTS_BACKEND=microservice
+TTS_SERVICE_URL=https://your-tts.up.railway.app
 FRONTEND_URL=https://your-app.vercel.app
 ```
 
-**Recommended**
-
-```
-LOG_LEVEL=INFO
-WHISPER_MODEL=base
-WHISPER_DEVICE=cpu
-SKIP_WHISPER_WARMUP=false
-```
-
-**Speaker WAV:** commit `BACKEND/voices/voice.wav` or upload via the UI after deploy.
-
-**Verify:** `GET https://<api>.onrender.com/health` → `database: true`, `xtts_ready: true`, `python: "3.11.9"`
-
-See [BACKEND/RENDER_DEPLOY.md](BACKEND/RENDER_DEPLOY.md) for details.
+Details: [BACKEND/RENDER_DEPLOY.md](BACKEND/RENDER_DEPLOY.md)
 
 ---
 
-## 2. Vercel (frontend)
+## 3. Vercel — frontend
 
-**Root Directory:** `Frontend`
-
+**Root:** `Frontend`  
 **Build:** `npm run build`  
 **Output:** `dist`
 
-**Environment variable (required in production)**
-
 ```
-VITE_API_URL=https://your-backend.onrender.com
+VITE_API_URL=https://your-api.onrender.com
 ```
-
-No trailing slash. Redeploy after setting this.
-
-**Local dev:** leave `VITE_API_URL` unset; Vite proxies `/api` → `http://127.0.0.1:8000`.
 
 ---
 
-## 3. Local development
-
-### Option A — Python 3.11 monolith (matches Render)
-
-```powershell
-cd BACKEND
-py -3.11 -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
-# .env: DATABASE_URL, GROQ_API_KEY, TTS_BACKEND=coqui
-.\.venv\Scripts\python -m uvicorn main:app --reload --port 8000
-```
-
-### Option B — Python 3.12 + TTS microservice
+## Local development
 
 ```powershell
 # Terminal 1 — TTS (Python 3.11)
 cd tts-service-python311
 .\start_tts_service.ps1
 
-# Terminal 2 — API (Python 3.12)
+# Terminal 2 — API
 cd BACKEND
-.\start_backend.ps1
 # .env: TTS_BACKEND=microservice, TTS_SERVICE_URL=http://127.0.0.1:8001
-```
+.\start_backend.ps1
 
-```powershell
+# Terminal 3 — Frontend
 cd Frontend
-npm install
 npm run dev
 ```
 
 ---
 
-## Pre-deploy checklist
+## Checklist
 
-- [ ] `DATABASE_URL` set on Render (not localhost)
-- [ ] `FRONTEND_URL` matches Vercel URL (CORS)
-- [ ] `VITE_API_URL` set on Vercel
-- [ ] `voice.wav` in repo or uploaded post-deploy
-- [ ] No `output_*.wav` in git (cached TTS outputs)
-- [ ] `.env` never committed (secrets)
+- [ ] Railway TTS healthy (`/health`)
+- [ ] Render `TTS_SERVICE_URL` points to Railway
+- [ ] Render `DATABASE_URL` set (not localhost)
+- [ ] Vercel `VITE_API_URL` points to Render
+- [ ] `voice.wav` on Render backend (syncs to Railway on startup)

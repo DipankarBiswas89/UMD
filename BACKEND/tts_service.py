@@ -1,5 +1,6 @@
 """
-TTS facade: in-process Coqui (Render/Python 3.11) -> external microservice -> Edge TTS fallback.
+TTS facade: Railway/ local microservice (Python 3.11 + Coqui) -> Edge TTS fallback.
+Render backend does NOT bundle Coqui — set TTS_SERVICE_URL to Railway.
 """
 from __future__ import annotations
 
@@ -15,8 +16,19 @@ logger = logging.getLogger(__name__)
 VOICE_DIR = Path(__file__).parent / "voices"
 VOICE_DIR.mkdir(exist_ok=True)
 
-TTS_BACKEND = os.getenv("TTS_BACKEND", "auto")
 _GENERATED_NAME_PREFIXES = ("output_", "test_output", "generated_")
+
+
+def _resolved_tts_backend() -> str:
+    explicit = (os.getenv("TTS_BACKEND") or "").strip().lower()
+    if explicit:
+        return explicit
+    # Cloud API hosts: always use external TTS service (Railway), never in-process Coqui
+    if os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT"):
+        return "microservice"
+    if os.getenv("TTS_SERVICE_URL"):
+        return "microservice"
+    return "auto"
 
 
 def is_valid_voice_sample_name(filename: str) -> bool:
@@ -25,18 +37,21 @@ def is_valid_voice_sample_name(filename: str) -> bool:
 
 
 def _use_local_coqui() -> bool:
-    if TTS_BACKEND == "edge-tts":
+    backend = _resolved_tts_backend()
+    if backend == "edge-tts":
         return False
-    if TTS_BACKEND in ("coqui", "local"):
+    if os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT"):
+        return False
+    if backend == "microservice":
+        return os.getenv("TTS_FORCE_LOCAL", "").lower() in ("1", "true", "yes")
+    if backend in ("coqui", "local"):
         return True
-    if os.getenv("RENDER") or os.getenv("USE_LOCAL_COQUI", "").lower() in ("1", "true", "yes"):
-        return True
-    if TTS_BACKEND == "auto":
+    if backend == "auto":
+        if os.getenv("TTS_SERVICE_URL"):
+            return False
         from utils.coqui_local import is_coqui_installed
 
         return is_coqui_installed()
-    if TTS_BACKEND == "microservice":
-        return os.getenv("TTS_FORCE_LOCAL", "").lower() in ("1", "true", "yes")
     return False
 
 
@@ -87,7 +102,7 @@ class TTSService:
             logger.warning("No voice sample in voices/ — upload speaker WAV for cloning")
 
     async def check_tts_service(self) -> bool:
-        if TTS_BACKEND == "edge-tts":
+        if _resolved_tts_backend() == "edge-tts":
             return False
         try:
             from services.tts_client import health_check
@@ -102,7 +117,7 @@ class TTSService:
             return False
 
     async def warmup_coqui(self) -> None:
-        """Warm up in-process XTTS on Render, or ping external TTS microservice."""
+        """Warm up local XTTS (dev only) or verify Railway/local TTS microservice."""
         if _use_local_coqui():
             from utils.coqui_local import is_coqui_installed, load_model_sync
 
@@ -168,11 +183,11 @@ class TTSService:
                 return output_path
             except Exception as exc:
                 logger.error("Local Coqui failed: %s", exc)
-                if TTS_BACKEND in ("coqui", "local"):
+                if _resolved_tts_backend() in ("coqui", "local"):
                     raise RuntimeError(f"Voice cloning failed: {exc}") from exc
 
         tts_up = self._tts_service_available or await self.check_tts_service()
-        if tts_up and TTS_BACKEND != "edge-tts":
+        if tts_up and _resolved_tts_backend() != "edge-tts":
             try:
                 from services.tts_client import generate_voice_to_path
 
@@ -186,7 +201,8 @@ class TTSService:
                 return output_path
             except Exception as exc:
                 logger.error("TTS microservice failed: %s", exc)
-                if TTS_BACKEND in ("microservice", "coqui") and not _use_local_coqui():
+                backend = _resolved_tts_backend()
+                if backend in ("microservice", "coqui") and not _use_local_coqui():
                     raise RuntimeError(f"Voice cloning failed: {exc}") from exc
 
         logger.warning("Using Edge TTS fallback (no voice clone)")
