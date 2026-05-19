@@ -21,10 +21,18 @@ class TTSClientError(Exception):
 
 
 async def health_check() -> dict:
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
         resp = await client.get(f"{TTS_SERVICE_URL}/health")
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        data["service_up"] = True
+        try:
+            ready_resp = await client.get(f"{TTS_SERVICE_URL}/health/ready")
+            data["model_ready"] = ready_resp.status_code == 200
+        except Exception:
+            data["model_ready"] = bool(data.get("model_loaded"))
+        data["ok"] = data.get("service_up") and data.get("model_ready", False)
+        return data
 
 
 async def upload_speaker(local_path: Path) -> dict:

@@ -1,12 +1,13 @@
 """
-Coqui XTTS v2 microservice entrypoint (Python 3.11).
-Run: uvicorn main:app --host 0.0.0.0 --port 8001
+Coqui XTTS v2 microservice (Python 3.11).
+Railway: binds to $PORT; /health returns 200 immediately; model loads in background.
 """
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.logging_config import setup_logging
 from app.routes import router
@@ -39,4 +40,9 @@ async def startup_event():
 
 @app.get("/")
 def root():
-    return {"service": "tts-service-python311", "docs": "/docs"}
+    return {
+        "service": "tts-service-python311",
+        "health": "/health",
+        "ready": "/health/ready",
+        "docs": "/docs",
+    }

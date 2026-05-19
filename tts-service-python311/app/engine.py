@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 _model = None
 _device: str = "cpu"
 _lock = threading.Lock()
+_model_loading = False
+_model_error: str | None = None
 
 
 def _patch_torch_load() -> None:
@@ -102,11 +104,39 @@ def _prepare_speaker_wav(speaker_wav: Path) -> Path:
     return prepared
 
 
+def model_status() -> dict:
+    if _model is not None:
+        return {"status": "ready", "model_loaded": True, "device": _device, "error": None}
+    if _model_error:
+        return {"status": "failed", "model_loaded": False, "device": None, "error": _model_error}
+    if _model_loading:
+        return {"status": "loading", "model_loaded": False, "device": None, "error": None}
+    return {"status": "idle", "model_loaded": False, "device": None, "error": None}
+
+
 def load_model_sync() -> None:
-    global _model, _device
+    global _model, _device, _model_loading, _model_error
     if _model is not None:
         return
 
+    with _lock:
+        if _model is not None:
+            return
+        _model_loading = True
+        _model_error = None
+
+    try:
+        _load_model_impl()
+    except Exception as exc:
+        _model_error = str(exc)
+        logger.exception("XTTS load failed")
+        raise
+    finally:
+        _model_loading = False
+
+
+def _load_model_impl() -> None:
+    global _model, _device
     with _lock:
         if _model is not None:
             return
@@ -133,8 +163,20 @@ def load_model_sync() -> None:
 
 
 async def warmup() -> None:
+    if _model is not None:
+        return
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, load_model_sync)
+
+
+async def warmup_background() -> None:
+    """Load XTTS without blocking HTTP server startup (Railway healthcheck)."""
+    if _model is not None or _model_loading:
+        return
+    try:
+        await warmup()
+    except Exception:
+        pass
 
 
 def _clean_text(text: str) -> str:

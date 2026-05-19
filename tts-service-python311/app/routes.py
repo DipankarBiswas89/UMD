@@ -53,13 +53,32 @@ class GenerateVoiceJson(BaseModel):
 
 @router.get("/health")
 async def health():
-    from app.engine import _model
+    """
+    Liveness probe — always HTTP 200 once uvicorn is up.
+    Railway must not wait for XTTS weights (can take 10+ minutes on CPU).
+    """
+    from app.engine import model_status
 
+    info = model_status()
     return {
         "ok": True,
-        "model_loaded": _model is not None,
         "service": "tts-service-python311",
+        **info,
     }
+
+
+@router.get("/health/ready")
+async def health_ready():
+    """Readiness — 200 only when XTTS is loaded and can synthesize."""
+    from app.engine import model_status
+
+    info = model_status()
+    if info["model_loaded"]:
+        return {**info, "ok": True}
+    raise HTTPException(
+        status_code=503,
+        detail=info.get("error") or f"Model not ready (status={info['status']})",
+    )
 
 
 @router.post("/generate-voice")
@@ -99,6 +118,7 @@ async def generate_voice(
         else:
             speaker_path = _resolve_speaker(speaker_wav)
 
+        await _ensure_model_ready()
         audio_id = uuid.uuid4().hex[:16]
         out_path = OUTPUT_DIR / f"{audio_id}.wav"
 
@@ -127,6 +147,7 @@ async def generate_voice(
 @router.post("/generate-voice/json")
 async def generate_voice_json(body: GenerateVoiceJson):
     """JSON variant — speaker_wav must exist in speakers/."""
+    await _ensure_model_ready()
     speaker_path = _resolve_speaker(body.speaker_wav)
     audio_id = uuid.uuid4().hex[:16]
     out_path = OUTPUT_DIR / f"{audio_id}.wav"
@@ -185,7 +206,27 @@ async def list_speakers():
 
 
 async def startup_warmup():
+    """Fast startup: serve /health immediately, load XTTS in background."""
+    import asyncio
+
+    from app.engine import warmup_background
+
     cleanup_old_files(OUTPUT_DIR, AUDIO_TTL_HOURS * 3600)
-    logger.info("Warming up XTTS model...")
+    logger.info("HTTP server up — loading XTTS in background (check /health/ready)")
+    asyncio.create_task(warmup_background())
+
+
+async def _ensure_model_ready() -> None:
+    from app.engine import model_status, warmup
+
+    info = model_status()
+    if info["model_loaded"]:
+        return
+    if info["status"] == "failed":
+        raise HTTPException(status_code=503, detail=f"XTTS failed to load: {info['error']}")
+    if info["status"] == "loading":
+        raise HTTPException(status_code=503, detail="XTTS is still loading — retry shortly")
     await warmup()
-    logger.info("TTS microservice ready")
+    info = model_status()
+    if not info["model_loaded"]:
+        raise HTTPException(status_code=503, detail=info.get("error") or "XTTS not available")

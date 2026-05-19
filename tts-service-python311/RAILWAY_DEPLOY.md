@@ -28,10 +28,18 @@ LOG_LEVEL=INFO
 
 Railway sets `PORT` automatically — do not hardcode 8001 in production.
 
+## Health checks
+
+| Path | Purpose |
+|------|---------|
+| `/health` | **Liveness** — returns 200 as soon as the server starts (Railway uses this) |
+| `/health/ready` | **Readiness** — 200 only after XTTS weights are loaded (may take 5–15 min on CPU) |
+
 ## After deploy
 
-1. Open `https://<service>.up.railway.app/health`
-2. Expect: `"xtts_ready": true`
+1. `GET /health` → should be **200** quickly with `"status": "loading"`
+2. Wait until `GET /health/ready` → **200** with `"model_loaded": true`
+3. Then point Render `TTS_SERVICE_URL` at this service
 3. Copy URL into Render backend:
 
 ```
@@ -45,6 +53,8 @@ On first voice request, Render backend uploads `voice.wav` to Railway via `/spea
 
 ## Notes
 
-- First deploy may take 15+ minutes (torch + XTTS model download).
-- Use at least 2 GB RAM plan if builds OOM.
+- **Healthcheck fix:** `/health` responds immediately; XTTS loads in the background. Use `/health/ready` to confirm cloning works.
+- First model load may take **5–15 minutes** on CPU after deploy (watch Railway logs).
+- Use at least **2–4 GB RAM** — XTTS OOM during load shows `status: failed` on `/health`.
+- If deploy still fails, check **Deploy Logs** (not just build) for Python tracebacks.
 - `build.sh` enforces Python 3.11 — required for `TTS==0.22.0`.

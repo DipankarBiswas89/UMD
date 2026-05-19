@@ -108,9 +108,15 @@ class TTSService:
             from services.tts_client import health_check
 
             data = await health_check()
-            ok = bool(data.get("ok"))
-            self._tts_service_available = ok
-            return ok
+            up = bool(data.get("service_up", data.get("ok")))
+            ready = bool(data.get("model_ready", data.get("model_loaded")))
+            self._tts_service_available = up and ready
+            if up and not ready:
+                logger.info(
+                    "TTS microservice up; XTTS still loading (check %s/health/ready)",
+                    os.getenv("TTS_SERVICE_URL", ""),
+                )
+            return self._tts_service_available
         except Exception as exc:
             logger.warning("TTS microservice unreachable: %s", exc)
             self._tts_service_available = False
