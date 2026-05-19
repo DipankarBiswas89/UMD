@@ -1,0 +1,13 @@
+BACKEND/project_311/
+__pycache__/
+.env
+*.pyc
+BACKEND/uploads/
+BACKEND/generated_audio/
+BACKEND/models/whisper/
+tts-service-python311/generated/
+tts-service-python311/.venv/
+tts-service-python311/models/
+node_modules/
+dist/
+BACKEND/.venv/

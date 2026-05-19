@@ -1,0 +1,46 @@
+# Voice Assistant — microservice stack
+# Main API: Python 3.12 | TTS: Python 3.11 (Coqui XTTS v2)
+
+services:
+  tts-service:
+    build:
+      context: ./tts-service-python311
+      dockerfile: Dockerfile
+    container_name: voice-assistant-tts
+    ports:
+      - "8001:8001"
+    environment:
+      TTS_USE_GPU: "false"
+      TTS_LANGUAGE: en
+      LOG_LEVEL: INFO
+    volumes:
+      - ./tts-service-python311/speakers:/app/speakers
+      - ./tts-service-python311/generated:/app/generated
+      # Mount main backend voice sample (read-only)
+      - ./BACKEND/voices:/app/speakers-host:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    restart: unless-stopped
+
+  # Optional: run main backend in Docker (build your own Dockerfile for BACKEND/)
+  # backend:
+  #   build: ./BACKEND
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     TTS_SERVICE_URL: http://tts-service:8001
+  #   depends_on:
+  #     tts-service:
+  #       condition: service_healthy
+
+  # Optional: frontend
+  # frontend:
+  #   build: ./Frontend
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - backend
